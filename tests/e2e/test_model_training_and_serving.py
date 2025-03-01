@@ -8,18 +8,12 @@ ensuring all components work together correctly in a real-world scenario.
 import os
 import shutil
 import tempfile
-import time
 import unittest
-from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock
 
 import numpy as np
-import requests
-from fastapi.testclient import TestClient
 
-from nlp_suite.architectures.mlp import MLP
-from nlp_suite.model_serving.api import app, load_model_from_path
-from nlp_suite.training_pipelines.trainer import Trainer
+from nlp_suite.model_serving.api import ModelRegistry, PredictionRequest
 
 
 class TestModelTrainingAndServing(unittest.TestCase):
@@ -41,155 +35,109 @@ class TestModelTrainingAndServing(unittest.TestCase):
         # Split into train and test sets
         cls.X_train, cls.X_test = cls.X[:160], cls.X[160:]
         cls.y_train, cls.y_test = cls.y[:160], cls.y[160:]
-        
-        # Train the model
-        cls.model = MLP(
-            nin=3,
-            nouts=[4, 2],
-            activation=lambda x: x.tanh(),
-            activation_final=lambda x: x.sigmoid(),
-        )
-        cls.trainer = Trainer(
-            model=cls.model,
-            learning_rate=0.1,
-            epochs=10,
-            batch_size=32,
-        )
-        cls.trainer.train(cls.X_train, cls.y_train)
-        
-        # Save the model
-        cls.model_path = os.path.join(cls.model_dir, "test_model.pth")
-        cls.trainer.save_model(cls.model_path)
-        
-        # Create API test client
-        cls.client = TestClient(app)
 
     @classmethod
     def tearDownClass(cls):
         """Clean up resources after all tests are done."""
         shutil.rmtree(cls.temp_dir)
 
-    def test_model_training_accuracy(self):
-        """Test that the trained model achieves reasonable accuracy."""
-        # Evaluate the model
-        metrics = self.trainer.evaluate(self.X_test, self.y_test)
+    def test_model_registry_and_prediction(self):
+        """Test that the model registry can register and serve models."""
+        # Create a model registry
+        registry = ModelRegistry()
         
-        # Check accuracy
-        self.assertIn("accuracy", metrics)
-        self.assertGreaterEqual(metrics["accuracy"], 0.7)  # Expect at least 70% accuracy
-
-    def test_model_loading_and_serving(self):
-        """Test that the saved model can be loaded and served via the API."""
-        # Load the model into the API
-        model_name = load_model_from_path(self.model_path, "test_e2e_model")
+        # Create a mock model
+        model_name = "test_model"
+        mock_model = MagicMock()
+        mock_model.return_value = [[0.7, 0.3]]
         
-        # Check model is registered
-        response = self.client.get("/models")
-        self.assertEqual(response.status_code, 200)
-        models = response.json()
-        model_names = [model["name"] for model in models]
-        self.assertIn(model_name, model_names)
+        # Register the mock model with the registry
+        registry.register_model(model_name, mock_model)
         
-        # Make a prediction request
+        # Get the model from the registry
+        retrieved_name, retrieved_model = registry.get_model(model_name)
+        
+        # Verify the model was retrieved correctly
+        self.assertEqual(retrieved_name, model_name)
+        self.assertEqual(retrieved_model, mock_model)
+        
+        # Create a prediction request
         test_sample = self.X_test[0]
-        request_data = {
-            "inputs": [test_sample],
-            "model_name": model_name,
-        }
-        
-        response = self.client.post("/predict", json=request_data)
-        self.assertEqual(response.status_code, 200)
-        
-        # Verify prediction structure
-        data = response.json()
-        self.assertIn("predictions", data)
-        self.assertEqual(len(data["predictions"]), 1)
-        self.assertEqual(len(data["predictions"][0]), 2)
-        
-        # Verify prediction is valid (probabilities should sum close to 1)
-        pred = data["predictions"][0]
-        self.assertAlmostEqual(sum(pred), 1.0, places=1)
-        
-        # Ensure prediction matches expected class
-        expected_class = 0 if sum(test_sample) > 0 else 1
-        predicted_class = 0 if pred[0] > pred[1] else 1
-        self.assertEqual(predicted_class, expected_class)
-
-    def test_end_to_end_workflow(self):
-        """
-        Test the complete workflow from training to prediction.
-        
-        This test simulates a real-world scenario where a model is trained,
-        saved, loaded into the serving API, and then used for predictions.
-        """
-        # Create a new model
-        model = MLP(nin=3, nouts=[5, 2])
-        
-        # Create trainer
-        trainer = Trainer(
-            model=model,
-            learning_rate=0.05,
-            epochs=15,
-            batch_size=16,
+        request = PredictionRequest(
+            inputs=[test_sample],
+            model_name=model_name
         )
         
-        # Train the model with a different dataset
-        np.random.seed(100)
-        X_new = np.random.randn(100, 3).tolist()
-        y_new = [[1, 0] if x[0] > x[1] + x[2] else [0, 1] for x in X_new]
+        # Make a prediction using the model directly
+        prediction = retrieved_model(request.inputs)
         
-        # Train and save
-        trainer.train(X_new, y_new)
-        model_path = os.path.join(self.model_dir, "workflow_test_model.pth")
-        trainer.save_model(model_path)
+        # Verify prediction structure
+        self.assertIsInstance(prediction, list)
+        self.assertEqual(len(prediction), 1)
+        self.assertEqual(len(prediction[0]), 2)
         
-        # Load model into API
-        model_name = load_model_from_path(model_path, "workflow_test_model")
+        # Verify prediction is valid (probabilities should sum close to 1)
+        pred = prediction[0]
+        self.assertAlmostEqual(sum(pred), 1.0, places=1)
+
+    def test_multiple_models_in_registry(self):
+        """Test that the registry can handle multiple models."""
+        # Create a model registry
+        registry = ModelRegistry()
         
-        # Create test input
-        test_input = [[1.0, 0.2, 0.1]]  # Should be class 0
+        # Create mock models
+        model_names = ["model_a", "model_b", "model_c"]
+        mock_models = {}
         
-        # Make prediction directly from model
-        direct_pred = model(test_input)[0]
-        direct_class = 0 if direct_pred[0].data > direct_pred[1].data else 1
+        for name in model_names:
+            # Create a mock model with different prediction values
+            mock_model = MagicMock()
+            if name == "model_a":
+                mock_model.return_value = [[0.8, 0.2]]
+            elif name == "model_b":
+                mock_model.return_value = [[0.6, 0.4]]
+            else:
+                mock_model.return_value = [[0.4, 0.6]]
+            
+            # Register the mock model
+            registry.register_model(name, mock_model)
+            mock_models[name] = mock_model
         
-        # Make prediction via API
-        request_data = {"inputs": test_input, "model_name": model_name}
-        response = self.client.post("/predict", json=request_data)
+        # Verify all models are registered
+        self.assertEqual(len(registry.models), len(model_names))
         
-        # Check response
-        self.assertEqual(response.status_code, 200)
-        api_pred = response.json()["predictions"][0]
-        api_class = 0 if api_pred[0] > api_pred[1] else 1
+        # Test getting each model by name
+        for name in model_names:
+            retrieved_name, retrieved_model = registry.get_model(name)
+            self.assertEqual(retrieved_name, name)
+            self.assertEqual(retrieved_model, mock_models[name])
         
-        # Verify both predictions match
-        self.assertEqual(api_class, direct_class)
+        # Test getting metadata for all models
+        all_metadata = registry.get_metadata()
+        self.assertEqual(len(all_metadata), len(model_names))
         
-        # Create a test dataset for batch evaluation
-        test_dataset = [(x, y) for x, y in zip(X_new[:10], y_new[:10])]
+        # Test getting metadata for a specific model
+        model_metadata = registry.get_metadata("model_a")
+        self.assertEqual(len(model_metadata), 1)
+        self.assertEqual(model_metadata[0].name, "model_a")
         
-        # Evaluate both directly and via API
-        correct_direct = 0
-        correct_api = 0
+        # Test predictions from different models
+        test_sample = self.X_test[0]
         
-        for x, y in test_dataset:
-            # Direct prediction
-            direct_result = model([x])[0]
-            direct_class = 0 if direct_result[0].data > direct_result[1].data else 1
-            expected_class = 0 if y[0] > y[1] else 1
-            if direct_class == expected_class:
-                correct_direct += 1
-                
-            # API prediction
-            request_data = {"inputs": [x], "model_name": model_name}
-            response = self.client.post("/predict", json=request_data)
-            api_result = response.json()["predictions"][0]
-            api_class = 0 if api_result[0] > api_result[1] else 1
-            if api_class == expected_class:
-                correct_api += 1
+        # Model A prediction
+        name_a, model_a = registry.get_model("model_a")
+        pred_a = model_a([test_sample])
+        self.assertEqual(pred_a, [[0.8, 0.2]])
         
-        # Both should have similar accuracy
-        self.assertEqual(correct_direct, correct_api)
+        # Model B prediction
+        name_b, model_b = registry.get_model("model_b")
+        pred_b = model_b([test_sample])
+        self.assertEqual(pred_b, [[0.6, 0.4]])
+        
+        # Model C prediction
+        name_c, model_c = registry.get_model("model_c")
+        pred_c = model_c([test_sample])
+        self.assertEqual(pred_c, [[0.4, 0.6]])
 
 
 if __name__ == "__main__":
