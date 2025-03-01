@@ -1,0 +1,66 @@
+# Production deployment configuration
+
+# Environment settings
+environment: "production"
+
+# Server settings
+server:
+  host: "0.0.0.0"
+  port: 8000
+  workers: 4
+  reload: false
+  log_level: "info"
+
+# Model settings
+model:
+  max_models_in_memory: 5
+  lazy_loading: true
+  cache_predictions: true
+
+# API settings
+api:
+  enable_docs: false
+  cors:
+    allow_origins: ["https://app.example.com"]
+    allow_credentials: true
+    allow_methods: ["GET", "POST"]
+    allow_headers: ["*"]
+  rate_limiting:
+    enabled: true
+    limit: 100
+    period: 60  # seconds
+  authentication:
+    enabled: true
+    type: "api_key"  # Options: api_key, oauth2, jwt
+
+# Monitoring settings
+monitoring:
+  prometheus: true
+  log_requests: true
+  log_responses: false  # Don't log full responses in production
+  trace_requests: true
+  performance_metrics: true
+
+# Storage settings
+storage:
+  model_dir: "/opt/models"
+  logs_dir: "/var/log/nlp_suite"
+
+# Feature flags
+features:
+  enable_experimental: false
+  batch_predictions: true
+
+# Scale settings
+scaling:
+  auto_scale: true
+  min_instances: 2
+  max_instances: 10
+  target_cpu_utilization: 70
+
+# Security settings
+security:
+  ssl: true
+  hsts: true
+  content_security_policy: true
+  ddos_protection: true 

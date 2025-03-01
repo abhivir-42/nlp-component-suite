@@ -1,0 +1,49 @@
+# Development deployment configuration
+
+# Environment settings
+environment: "development"
+
+# Server settings
+server:
+  host: "0.0.0.0"
+  port: 8000
+  workers: 1
+  reload: true
+  log_level: "debug"
+
+# Model settings
+model:
+  max_models_in_memory: 2
+  lazy_loading: false
+  cache_predictions: true
+
+# API settings
+api:
+  enable_docs: true
+  cors:
+    allow_origins: ["*"]
+    allow_credentials: true
+    allow_methods: ["*"]
+    allow_headers: ["*"]
+  rate_limiting:
+    enabled: false
+  authentication:
+    enabled: false
+
+# Monitoring settings
+monitoring:
+  prometheus: false
+  log_requests: true
+  log_responses: true
+  trace_requests: true
+  performance_metrics: true
+
+# Storage settings
+storage:
+  model_dir: "./saved_models"
+  logs_dir: "./logs/dev"
+
+# Feature flags
+features:
+  enable_experimental: true
+  batch_predictions: true 
