@@ -1,0 +1,29 @@
+# MLP model configuration
+
+model:
+  type: mlp
+  params:
+    nin: 2  # Number of input features
+    nouts: [4, 2]  # Hidden layer sizes and output size
+    activation: tanh  # Activation function for hidden layers
+    activation_final: sigmoid  # Activation function for output layer
+
+training:
+  optimizer:
+    type: sgd
+    params:
+      lr: 0.1
+      momentum: 0.9
+      weight_decay: 0.0001
+  
+  batch_size: 32
+  epochs: 100
+  loss_fn: binary_cross_entropy
+  
+  metrics:
+    - accuracy
+
+data:
+  n_samples: 200
+  noise: 0.2
+  train_ratio: 0.8 
