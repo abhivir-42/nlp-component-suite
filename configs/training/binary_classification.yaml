@@ -1,0 +1,49 @@
+# Binary classification training configuration
+
+# Extend the default configuration
+defaults:
+  - default
+
+# Override specific parameters for binary classification
+training:
+  epochs: 50
+  batch_size: 64
+
+# Loss function configuration
+loss:
+  name: "binary_cross_entropy"
+  label_smoothing: 0.1
+
+# Metrics configuration
+metrics:
+  - name: "accuracy"
+    threshold: 0.5
+  - name: "precision"
+    threshold: 0.5
+  - name: "recall"
+    threshold: 0.5
+  - name: "f1"
+    threshold: 0.5
+  - name: "auc"
+  - name: "confusion_matrix"
+    normalize: true
+
+# Data augmentation for binary classification
+augmentation:
+  enabled: true
+  random_flip: true
+  random_rotation: 15  # degrees
+  random_crop:
+    enabled: true
+    padding: 4
+  mixup:
+    enabled: false
+    alpha: 0.2
+
+# Prediction threshold tuning
+threshold_tuning:
+  enabled: true
+  metric: "f1"  # Metric to optimize
+  min_threshold: 0.1
+  max_threshold: 0.9
+  step: 0.05 
